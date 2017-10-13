@@ -1,0 +1,1 @@
+java -cp .:lib/fanseparser-0.2.2.jar:lib/maxent-3.0.0.jar:lib/trove.jar:lib/jet-all.jar edu.nyu.jetlite.POStagger  data/WSJ_02-21.pos data/WSJ_24.pos POSmodel

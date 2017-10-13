@@ -1,0 +1,1 @@
+java -cp .:lib/fanseparser-0.2.2.jar:lib/maxent-3.0.0.jar:lib/trove.jar:lib/jet-all.jar edu.nyu.jetlite.EventTagger data/trainDocs data/testDocs data/ACE2005 Vmodel

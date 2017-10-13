@@ -1,0 +1,1 @@
+java -Xmx1200m -cp .:/lib/fanseparser-0.2.2.jar:lib/apache-opennlp-1.8.1/lib/opennlp-tools-1.8.1.jar:lib/trove.jar:lib/jet-all.jar edu.nyu.jetlite.Hub $1
