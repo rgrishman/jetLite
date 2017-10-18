@@ -10,9 +10,6 @@ package edu.nyu.jetlite;
 import edu.nyu.jetlite.tipster.*;
 import java.io.*;
 import java.util.*;
-import opennlp.maxent.*;
-import opennlp.maxent.io.*;
-import opennlp.model.*;
 
 /**
  *  A part-of-speech tagger trained on the Penn Treebank in CoNLL format.  Adds
@@ -23,12 +20,13 @@ public class POStagger extends Annotator {
 
     String modelFileName;
     
-    GISModel model;
+    MaxEntModel model;
 
     String[] columns = {"token", "pos"};
 
     public POStagger (Properties config) throws IOException {
 	modelFileName = config.getProperty("POStagger.model.fileName");
+	model = new OpenMaxEntModel(modelFileName, "POS tagging");
     }
 
     /**
@@ -80,7 +78,7 @@ public class POStagger extends Annotator {
 	    trainOnSentence(s, eventWriter);
 	}
 	eventWriter.close();
-	MaxEnt.buildModel(modelFileName);
+	model.train("events");
     }
 
     /**
@@ -108,7 +106,7 @@ public class POStagger extends Annotator {
      */
 
     Datum POSfeatures (int i, String[] words, String priorTag) {
-        Datum d = new Datum();
+        Datum d = new Datum(model);
 	int nTokens = words.length;
 	String prior = (i > 0) ? words[i-1].toLowerCase() : "^";
 	String current = words[i].toLowerCase();
@@ -128,8 +126,8 @@ public class POStagger extends Annotator {
 
 
     public void tagDocument (Document doc, Span span) {
-	if (model == null)
-	    model = MaxEnt.loadModel(modelFileName, "POStagger");
+	if (!model.isLoaded())
+	    model.loadModel();
 	Vector<Annotation> sentences = doc.annotationsOfType("sentence");
 	for (Annotation sentence : sentences) {
 	    tagSentence (doc, sentence);
@@ -153,7 +151,7 @@ public class POStagger extends Annotator {
 	String priorTag = "^";
 	for (int i=0; i < nTokens; i++) {
 	    Datum context = POSfeatures(i, words, priorTag);
-	    String prediction = model.getBestOutcome(model.eval(context.toArray()));
+	    String prediction = model.getBestOutcome(context.toArray());
 	    tokens.get(i).setPos(prediction);
 	    priorTag = prediction;
 	}
@@ -164,7 +162,6 @@ public class POStagger extends Annotator {
      */
 
     public void  evaluate (String conllFileName) throws IOException {
-	model = MaxEnt.loadModel(modelFileName, "POStagger");
 	int tags = 0;
 	int correct = 0;
 	SentenceStream ss = new SentenceStream(new File(conllFileName), columns, "\t");
@@ -178,7 +175,7 @@ public class POStagger extends Annotator {
 	    for (int i=0; i < nTokens; i++) {
 		tags++;
 		Datum context = POSfeatures (i, words, priorTag);
-		String prediction = model.getBestOutcome(model.eval(context.toArray()));
+		String prediction = model.getBestOutcome(context.toArray());
 		if (s.get("pos", i).equals(prediction))
 		    correct++;
 		priorTag = prediction;

@@ -10,9 +10,6 @@ package edu.nyu.jetlite;
 import edu.nyu.jetlite.tipster.*;
 import java.io.*;
 import java.util.*;
-import opennlp.maxent.*;
-import opennlp.maxent.io.*;
-import opennlp.model.*;
 
 /**
   *  A named entity tagger trained on the CoNLL English data.
@@ -22,12 +19,13 @@ public class NEtagger extends Annotator {
 
     String modelFileName;
     
-    GISModel model;
+    MaxEntModel model;
 
     String[] columns = {"token", null, null, "NEtype"};
 
     public NEtagger (Properties config) throws IOException {
 	modelFileName = config.getProperty("NEtagger.model.fileName");
+	model = new MalletMaxEntModel(modelFileName, "NEtagger");
     }
 
     /**
@@ -76,7 +74,7 @@ public class NEtagger extends Annotator {
 	    trainOnSentence(s, eventWriter);
 	}
 	eventWriter.close();
-	MaxEnt.buildModel(modelFileName, 1);
+	model.train("events", 2);
     }
 
     private void trainOnSentence (SentenceFromStream s, PrintWriter eventWriter) {
@@ -98,23 +96,26 @@ public class NEtagger extends Annotator {
      */
 
     Datum NEfeatures (int i, String[] words, String priorTag) {
-        Datum d = new Datum();
+        Datum d = new Datum(model);
 	int nTokens = words.length;
 	String prior = (i > 0) ? words[i-1].toLowerCase() : "^";
 	String current = words[i].toLowerCase();
 	String next = (i >= nTokens -1) ? "$" : words[i+1].toLowerCase();
 
-	d.addFV ("p", prior + ":" + priorTag);
-	d.addFV ("c", current + ":" + priorTag);
-	d.addFV ("n", next + ":" + priorTag);
-	d.addFV ("w[i]", words[i]);
+	if (i > 0 && Character.isUpperCase(words[i].charAt(0))) d.addF("cap");
+	d.addFV ("prior", prior);
+	d.addFV ("current", current);
+	d.addFV ("next", next);
+	d.addFV ("bigram", prior + ":" + current);
+	d.addFV ("priorTag", priorTag);
+	if (current.length() > 2) d.addFV ("suffix", current.substring(current.length() - 2));
 	return d;
 	}
 
 
     public void tagDocument (Document doc, Span span) {
-	if (model == null)
-	    model = MaxEnt.loadModel(modelFileName, "NEtagger");
+	if (!model.isLoaded())
+	    model.loadModel();
 	Vector<Annotation> sentences = doc.annotationsOfType("sentence");
 	for (Annotation sentence : sentences) {
 	    tagSentence (doc, sentence);
@@ -142,7 +143,7 @@ public class NEtagger extends Annotator {
 	String priorTag = "^";
 	for (int i=0; i < nTokens; i++) {
 	    Datum context = NEfeatures(i, words, priorTag);
-	    String prediction = model.getBestOutcome(model.eval(context.toArray()));
+	    String prediction = model.getBestOutcome(context.toArray());
 	    response[i] = prediction;
 	    priorTag = prediction;
 	}
@@ -150,7 +151,6 @@ public class NEtagger extends Annotator {
     }
 
     public void  evaluate (String conllFileName) throws IOException {
-	model = MaxEnt.loadModel(modelFileName, "NEtagger");
 	BIO.resetScore();
 	SentenceStream ss = new SentenceStream(new File(conllFileName), columns, " ");
 	SentenceFromStream s;
@@ -164,7 +164,7 @@ public class NEtagger extends Annotator {
 	    String priorTag = "^";
 	    for (int i=0; i < nTokens; i++) {
 		Datum context = NEfeatures (i, words, priorTag);
-		String prediction = model.getBestOutcome(model.eval(context.toArray()));
+		String prediction = model.getBestOutcome(context.toArray());
 		response[i] = prediction;
 		key[i] = s.get("NEtype", i);
 		priorTag = prediction;

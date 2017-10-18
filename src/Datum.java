@@ -13,12 +13,15 @@ public class Datum {
 
 	String outcome;
 
+	boolean OUTCOME_FIRST = false;
+
 	/**
 	 *  create a new Datum.
 	 */
 
-	public Datum () {
+	public Datum (MaxEntModel model) {
 		features = new ArrayList();
+		OUTCOME_FIRST = model instanceof MalletMaxEntModel;
 	}
 
 	/**
@@ -49,18 +52,28 @@ public class Datum {
 	}
 
 	/**
-	 *  return the Datum as a sequence of space-separated features, with the
-	 *  outcome at the end.
+	 *  returns the Datum as a sequence of space-separated features, with the
+	 *  outcome at  one end.  For the Mallet tagger, the utcome is
+	 *  placed at the beginning;  for the OpenNLP tagger it is
+	 *  placed at the end.
 	 */
 
 	@Override
 	public String toString () {
 		StringBuffer s = new StringBuffer();
-		for (int i=0; i<features.size(); i++) {
+		if (OUTCOME_FIRST) {
+		    s.append(outcome);
+		    for (int i=0; i<features.size(); i++) {
+			s.append(" ");
+			s.append((String)features.get(i));
+		    }
+		} else {
+		    for (int i=0; i<features.size(); i++) {
 			s.append((String)features.get(i));
 			s.append(" ");
+		    }
+		    s.append(outcome);
 		}
-		s.append(outcome);
 		return s.toString();
 	}
 

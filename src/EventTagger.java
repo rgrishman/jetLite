@@ -11,9 +11,6 @@ import edu.nyu.jetlite.tipster.*;
 import java.io.*;
 import java.util.*;
 import edu.nyu.jet.aceJet.*;
-import opennlp.maxent.*;
-import opennlp.maxent.io.*;
-import opennlp.model.*;
 
 /**
  *  Identify ACE events.
@@ -27,7 +24,7 @@ public class EventTagger extends Annotator {
     String modelFileName;
 
     // the MaxEnt model
-    GISModel model;
+    MaxEntModel model;
 
     /**
      *  Create a new EventTagger.
@@ -38,6 +35,7 @@ public class EventTagger extends Annotator {
 
     public EventTagger (Properties config) throws IOException {
 	modelFileName = config.getProperty("EventTagger.model.fileName");
+	model = new MalletMaxEntModel(modelFileName, "EventTagger");
     }
 
     /**
@@ -81,7 +79,7 @@ public class EventTagger extends Annotator {
 	    if (docCount % 5 == 0) System.out.print(".");
 	}
 	eventWriter.close();
-	MaxEnt.buildModel(modelFileName);
+	model.train("events");
     }
 
     /**
@@ -127,9 +125,9 @@ public class EventTagger extends Annotator {
      *  A map from the position of the event trigger to the type of the event.
      */
 
-    static Map<Integer, String> mentionMap;
+    Map<Integer, String> mentionMap;
 
-    static void findEventMentions (AceDocument aceDoc) {
+    void findEventMentions (AceDocument aceDoc) {
 	mentionMap = new HashMap<Integer, String>();
 	List<AceEvent> events = aceDoc.events;
 	for (AceEvent event : events) {
@@ -150,15 +148,15 @@ public class EventTagger extends Annotator {
      *  document topic.
      */
 
-    static Datum eventFeatures (String word) {
-	Datum d = new Datum();
+    Datum eventFeatures (String word) {
+	Datum d = new Datum(model);
 	d.addF(word);
 	return d;
     }
 
-    static int correctEvents;
-    static int responseEvents;
-    static int keyEvents;
+    int correctEvents;
+    int responseEvents;
+    int keyEvents;
 
      /**
       *  Evaluate the event model just built and print the scores.
@@ -172,7 +170,6 @@ public class EventTagger extends Annotator {
 	correctEvents = 0;
 	responseEvents = 0;
 	keyEvents = 0;
-	model = MaxEnt.loadModel(modelFileName, "EventTagger");
 	BufferedReader docListReader = new BufferedReader (new FileReader (testDocListFileName));
 	String line; 
 	while ((line = docListReader.readLine()) != null)
@@ -216,7 +213,7 @@ public class EventTagger extends Annotator {
 	    String type = mentionMap.get(posn);
 	    if (type == null)
 		type = "other";
-	    String prediction = model.getBestOutcome(model.eval(d.toArray()));
+	    String prediction = model.getBestOutcome(d.toArray());
 	    if (prediction.equals(type) && !prediction.equals("other"))
 		correctEvents++;
 	    if ( !prediction.equals("other"))
@@ -236,15 +233,15 @@ public class EventTagger extends Annotator {
      */
 
     public Document annotate (Document doc, Span span) {
-	if (model == null)
-	    model = MaxEnt.loadModel(modelFileName, "EventTagger");
+	if (!model.isLoaded())
+	    model.loadModel();
 	Vector<Annotation> tokens = doc.annotationsOfType("token");
 	if (tokens == null)
 	    return doc;
 	for (Annotation token : tokens) {
 	    String tokenText = doc.normalizedText(token);
 	    Datum d = eventFeatures(tokenText);
-	    String prediction = model.getBestOutcome(model.eval(d.toArray()));
+	    String prediction = model.getBestOutcome(d.toArray());
 	    if ( !prediction.equals("other")) {
 		EventMention em = new EventMention(token.span());
 		doc.addAnnotation (em);

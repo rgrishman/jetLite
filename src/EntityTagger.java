@@ -11,9 +11,6 @@ import edu.nyu.jetlite.tipster.*;
 import java.io.*;
 import java.util.*;
 import edu.nyu.jet.aceJet.*;
-import opennlp.maxent.*;
-import opennlp.maxent.io.*;
-import opennlp.model.*;
 
 /**
  *  Assigns semantic type information to entities.  Each entity is tagged with
@@ -29,10 +26,11 @@ public class EntityTagger extends Annotator {
 
     String modelFileName;
 
-    GISModel model;
+    MaxEntModel model;
 
     public EntityTagger (Properties config) throws IOException {
 	modelFileName = config.getProperty("EntityTagger.model.fileName");
+	model = new MalletMaxEntModel(modelFileName, "EntityTagger");
     }
 
     /**
@@ -81,7 +79,7 @@ public class EntityTagger extends Annotator {
             if (docCount % 5 == 0) System.out.print(".");
         }
         eventWriter.close();
-	MaxEnt.buildModel(modelFileName);
+	model.train("events");
     }
 
      /**
@@ -124,9 +122,9 @@ public class EntityTagger extends Annotator {
 	}
     }
 
-    static Map<Integer, AceEntityMention> mentionMap;
+    Map<Integer, AceEntityMention> mentionMap;
 
-    static void findEntityMentions (AceDocument aceDoc) {
+    void findEntityMentions (AceDocument aceDoc) {
 	mentionMap = new HashMap<Integer, AceEntityMention>();
 	ArrayList entities = aceDoc.entities;
 	for (int i=0; i<entities.size(); i++) {
@@ -141,8 +139,8 @@ public class EntityTagger extends Annotator {
 	}
     }
 
-    static Datum entityFeatures (String word) {
-	Datum d = new Datum();
+    Datum entityFeatures (String word) {
+	Datum d = new Datum(model);
 	d.addF(word);
 	return d;
     }
@@ -172,9 +170,9 @@ public class EntityTagger extends Annotator {
 	return fileText.toString();
     }
     
-    static int correctEntities;
-    static int responseEntities;
-    static int keyEntities;
+    int correctEntities;
+    int responseEntities;
+    int keyEntities;
 
     /**
      *  Evaluate the performance of the entity tagger.
@@ -187,7 +185,6 @@ public class EntityTagger extends Annotator {
 	correctEntities = 0;
 	responseEntities = 0;
 	keyEntities = 0;
-	model = MaxEnt.loadModel(modelFileName, "EntityTagger");
 	BufferedReader docListReader = new BufferedReader (new FileReader (testDocListFileName));
 	String line; 
 	while ((line = docListReader.readLine()) != null)
@@ -225,7 +222,7 @@ public class EntityTagger extends Annotator {
 	    Datum d = entityFeatures(tokenText);
 	    AceEntityMention mention = mentionMap.get(posn);
 	    String type = (mention == null) ? "other" : mention.entity.type;
-	    String prediction = model.getBestOutcome(model.eval(d.toArray()));
+	    String prediction = model.getBestOutcome(d.toArray());
 	    if (prediction.equals(type) && !prediction.equals("other"))
 		correctEntities++;
 	    if ( !prediction.equals("other"))
@@ -237,15 +234,15 @@ public class EntityTagger extends Annotator {
     }
 
     public Document annotate (Document doc, Span span) {
-	if (model == null)
-	    model = MaxEnt.loadModel(modelFileName, "EntityTagger");
+	if (!model.isLoaded())
+	    model.loadModel();
 	Vector<Annotation> entities = doc.annotationsOfType("entity");
 	if (entities == null)
 	    return doc;
 	for (Annotation entity : entities) {
 	    String tokenText = doc.normalizedText(entity);
 	    Datum d = entityFeatures(tokenText);
-	    String prediction = model.getBestOutcome(model.eval(d.toArray()));
+	    String prediction = model.getBestOutcome(d.toArray());
 	    ((Entity) entity).setSemType(prediction);
 	}
 	return doc;
